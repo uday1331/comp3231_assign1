@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef BLOCK_SIZE
+#define BLOCK_SIZE 512
+#endif
+
 using namespace std;
 
 //We may change this value!!
@@ -84,7 +88,29 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 }
 
 // TODO: implement the kneral function for 2D smoothing 
+__global__ void smoothen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH){
+	int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
+	if(idx < sizeX * sizeY * 3) {
+		int z = idx % 3;
+		int x = (idx/3) % sizeX - FILTER_WIDTH/2;
+		int y = idx/(sizeX * 3) - FILTER_WIDTH/2;
+
+		
+		int value = 0;
+		for (int i = y; i < y + FILTER_WIDTH; i++){
+			for (int j = x; j < x + FILTER_WIDTH; j++){
+				if (i > -1 && i < sizeY && j > -1 && j < sizeX){
+					value += FILTER[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX*3 + j*3 + z];
+				}
+			}
+		}
+		value /= 1115;
+		if (value < 0) value =  0;
+		if (value > 255) value = 255;
+		result[idx] = value;
+	}
+}
 
 // GPU implementation
 void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
@@ -97,20 +123,33 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 
 	// TODO: allocate device memory and copy data onto the device
 
+	int *d_data, *d_result, *d_FILTER;
+	int size = (sizeX * sizeY * 3) * sizeof(int);
+
+	cudaMalloc((void **)&d_data, size);
+	cudaMalloc((void **)&d_result, size);
+	cudaMalloc((void **)&d_FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
+
+	cudaMemcpy(d_data, data, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_FILTER, FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+
 	// Start timer for kernel
 	auto startKernel = chrono::steady_clock::now();
+	const int n_blocks = (sizeX * sizeY * 3)/BLOCK_SIZE;
 
 	// TODO: call the kernel function
-	
+	smoothen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH);
+
 	// End timer for kernel and display kernel time
 	cudaDeviceSynchronize(); // <- DO NOT REMOVE
 	auto endKernel = chrono::steady_clock::now();
 	cout << "Kernel Elapsed time: " << chrono::duration <double, milli>(endKernel - startKernel).count() << "ms\n";
 
 	// TODO: copy reuslt from device to host
+	cudaMemcpy(result, d_result, size, cudaMemcpyDeviceToHost);
 
 	// TODO: free device memory
-
+	cudaFree(d_data); cudaFree(d_result); cudaFree(d_FILTER);
 }
 
 
@@ -129,24 +168,23 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	long long idx = 0;
 	for (idx = 0; idx < sizeX * sizeY * 3; idx++){
 		int z = idx % 3;
-		int x = (idx/3) % sizeY;
-		int y = i/(sizeY * 3);
+		int x = (idx/3) % sizeX - FILTER_WIDTH/2;
+		int y = idx/(sizeX * 3) - FILTER_WIDTH/2;
 
 		
 		int value = 0;
 		for (int i = y; i < y + FILTER_WIDTH; i++){
 			for (int j = x; j < x + FILTER_WIDTH; j++){
 				if (i > -1 && i < sizeY && j > -1 && j < sizeX){
-					value += FILTER[(i-y)*FILTER_WIDTH + (j-x)] * data[(i-y)*sizeX*3 + (j-x)*sizeX + z];
+					value += FILTER[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX*3 + j*3 + z];
 				}
 			}
 		}
-
+		value /= 1115;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
 	}
-
 }
 
 // The image is flattened into a text file of pixel values.
@@ -175,7 +213,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Elapsed time: " << chrono::duration <double, milli>(endCPU - startCPU).count() << "ms\n";
 
-	// displayResult(dataForCPUTest, resultForCPUTest, size);
+	displayResult(dataForCPUTest, resultForCPUTest, size);
 
 	saveResult("color_result_CPU.txt",resultForCPUTest, sizeX, sizeY);
 
@@ -188,7 +226,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Elapsed time: " << chrono::duration <double, milli>(endGPU - startGPU).count() << "ms\n";
 
-	// displayResult(dataForGPUTest, resultForGPUTest, size);
+	displayResult(dataForGPUTest, resultForGPUTest, size);
 	saveResult("color_result_GPU.txt",resultForGPUTest, sizeX, sizeY);
 
 	return 0;
