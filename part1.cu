@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef BLOCK_SIZE
+#define BLOCK_SIZE 512
+#endif
+
 using namespace std;
 
 const int FILTER_WIDTH = 3;
@@ -81,8 +85,24 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 
 //TODO: Implement the kernel function
 
-__global__ void sharpen(int *data, int *result, int sizeX, int sizeY){
+__global__ void sharpen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH){
+	int idx = threadIdx.x + blockIdx.x * blockDim.x;
+	
+	if(idx < sizeX * sizeY) {
+		int fltrOffSetI = (idx / sizeX) - FILTER_WIDTH/2;
+		int fltrOffSetJ = (idx % sizeX) - FILTER_WIDTH/2;
+		
+		int value = 0;
+		for (int i = fltrOffSetI; i < fltrOffSetI + FILTER_WIDTH; i++){
+			for (int j = fltrOffSetJ; j < fltrOffSetJ + FILTER_WIDTH; j++){
+				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += FILTER[(i-fltrOffSetI)*FILTER_WIDTH + (j-fltrOffSetJ)] * data[i*sizeX + j];
+			}
+		}
 
+		if (value < 0) value =  0;
+		if (value > 255) value = 255;
+		result[idx] = value;
+	}
 }
 
 // GPU implementation
@@ -94,22 +114,36 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// output:
 	//	int result[] - int array holding the output image
 
-	// TODO: malloc memory, copy input
+	// TODO: malloc memory, copy input "from host to device"
+
+	int *d_data, *d_result, *d_FILTER;
+	int size = (sizeX * sizeY) * sizeof(int);
+
+	cudaMalloc((void **)&d_data, size);
+	cudaMalloc((void **)&d_result, size);
+	cudaMalloc((void **)&d_FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
+
+	cudaMemcpy(d_data, data, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_FILTER, FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+	
 
 	// Start timer for kernel
 	// Don't change this function
 	auto startKernel = chrono::steady_clock::now();
+	const int n_blocks = (sizeX * sizeY)/BLOCK_SIZE;
 
 	// TODO: call the kernel function
-	sharpen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_sizeX, d_sizeY);
+	sharpen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH);
 	// End timer for kernel and display kernel time
 	cudaDeviceSynchronize(); // <- DO NOT REMOVE
 	auto endKernel = chrono::steady_clock::now();
 	cout << "Kernel Elapsed time: " << chrono::duration <double, milli>(endKernel - startKernel).count() << "ms\n";
 
 	// TODO: copy reuslt from device to host
+	cudaMemcpy(result, d_result, size, cudaMemcpyDeviceToHost);
 
 	// TODO: free device memory <- important, keep your code clean
+	cudaFree(d_data); cudaFree(d_result); cudaFree(d_FILTER);
 }
 
 
@@ -121,7 +155,6 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	//	int sizeY - the height of the image
 	// output:
 	//	int result[] - int array holding the output image
-
 	// TODO: sharpen the image with filter
 	//       apply zero padding for the border
 	long long idx = 0;
