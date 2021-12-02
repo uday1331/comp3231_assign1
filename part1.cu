@@ -129,14 +129,17 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 		int fltrOffSetI = (idx / sizeX) - FILTER_WIDTH/2;
 		int fltrOffSetJ = (idx % sizeX) - FILTER_WIDTH/2;
 		
-		for (int i = fltrOffSetI; i < FILTER_WIDTH + fltrOffSetI; i++){
-			int value = 0;
-			for (int j = fltrOffSetJ; j < FILTER_WIDTH + fltrOffSetJ; j++)
-				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += FILTER[k*sizeX + l] + data[i+sizeX + j]
-			result[idx] = value;
+		int value = 0;
+		for (int i = fltrOffSetI; i < fltrOffSetI + FILTER_WIDTH; i++){
+			for (int j = fltrOffSetJ; j < fltrOffSetJ + FILTER_WIDTH; j++){
+				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += FILTER[(i-fltrOffSetI)*FILTER_WIDTH + (j-fltrOffSetJ)] * data[i*sizeX + j];
+			}
 		}
-	}
 
+		if (value < 0) value =  0;
+		if (value > 255) value = 255;
+		result[idx] = value;
+	}
 }
 
 // The input is a 2D grayscale image
