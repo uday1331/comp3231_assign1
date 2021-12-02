@@ -2,6 +2,7 @@
 #include <string>
 #include <fstream>
 #include <chrono>
+#include <numeric>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,7 +89,7 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 }
 
 // TODO: implement the kneral function for 2D smoothing 
-__global__ void smoothen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH){
+__global__ void smoothen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH, int filterSum){
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
 	if(idx < sizeX * sizeY * 3) {
@@ -105,7 +106,7 @@ __global__ void smoothen(int *data, int *result, int *FILTER, int sizeX, int siz
 				}
 			}
 		}
-		value /= 1115;
+		value /= filterSum;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
@@ -121,11 +122,11 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// output:
 	//	int result[] - int array holding the image
 
+	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
 	// TODO: allocate device memory and copy data onto the device
-
 	int *d_data, *d_result, *d_FILTER;
 	int size = (sizeX * sizeY * 3) * sizeof(int);
-
+	
 	cudaMalloc((void **)&d_data, size);
 	cudaMalloc((void **)&d_result, size);
 	cudaMalloc((void **)&d_FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
@@ -138,7 +139,7 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	const int n_blocks = (sizeX * sizeY * 3)/BLOCK_SIZE;
 
 	// TODO: call the kernel function
-	smoothen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH);
+	smoothen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH, filterSum);
 
 	// End timer for kernel and display kernel time
 	cudaDeviceSynchronize(); // <- DO NOT REMOVE
@@ -164,6 +165,7 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 
 	// TODO: smooth the image with filter size = FILTER_WIDTH
 	//       apply zero padding for the border
+	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
 
 	long long idx = 0;
 	for (idx = 0; idx < sizeX * sizeY * 3; idx++){
@@ -180,7 +182,7 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 				}
 			}
 		}
-		value /= 1115;
+		value /= filterSum;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;

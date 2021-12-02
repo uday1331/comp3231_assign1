@@ -2,6 +2,7 @@
 #include <string>
 #include <fstream>
 #include <chrono>
+#include <numeric>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,7 +86,7 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 
 //TODO: Implement the kernel function
 
-__global__ void sharpen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH){
+__global__ void sharpen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH, int filterSum){
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
 	
 	if(idx < sizeX * sizeY) {
@@ -99,6 +100,7 @@ __global__ void sharpen(int *data, int *result, int *FILTER, int sizeX, int size
 			}
 		}
 
+		value /= filterSum;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
@@ -115,6 +117,8 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	//	int result[] - int array holding the output image
 
 	// TODO: malloc memory, copy input "from host to device"
+
+	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
 
 	int *d_data, *d_result, *d_FILTER;
 	int size = (sizeX * sizeY) * sizeof(int);
@@ -133,7 +137,7 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	const int n_blocks = (sizeX * sizeY)/BLOCK_SIZE;
 
 	// TODO: call the kernel function
-	sharpen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH);
+	sharpen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH, filterSum);
 	// End timer for kernel and display kernel time
 	cudaDeviceSynchronize(); // <- DO NOT REMOVE
 	auto endKernel = chrono::steady_clock::now();
@@ -157,6 +161,8 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	//	int result[] - int array holding the output image
 	// TODO: sharpen the image with filter
 	//       apply zero padding for the border
+	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
+
 	long long idx = 0;
 	for (idx = 0; idx < sizeX * sizeY; idx++){
 		int fltrOffSetI = (idx / sizeX) - FILTER_WIDTH/2;
@@ -169,6 +175,7 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 			}
 		}
 
+		value /= filterSum;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
@@ -202,7 +209,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Elapsed time: " << chrono::duration <double, milli>(endCPU - startCPU).count() << "ms\n";
 	// For debug
-	// displayResult(dataForCPUTest, resultForCPUTest, size);
+	displayResult(dataForCPUTest, resultForCPUTest, size);
 
 	saveResult("grey_result_CPU.txt",resultForCPUTest, sizeX, sizeY);
 
@@ -216,7 +223,7 @@ int main(int argc, char *argv[]) {
 	cout << "Elapsed time: " << chrono::duration <double, milli>(endGPU - startGPU).count() << "ms\n";
 
 	// For debug
-	// displayResult(dataForGPUTest, resultForGPUTest, size);
+	displayResult(dataForGPUTest, resultForGPUTest, size);
 	saveResult("grey_result_GPU.txt",resultForGPUTest, sizeX, sizeY);
 
 	return 0;
