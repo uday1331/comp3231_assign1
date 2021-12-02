@@ -125,6 +125,28 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 
 	// TODO: smooth the image with filter size = FILTER_WIDTH
 	//       apply zero padding for the border
+
+	long long idx = 0;
+	for (idx = 0; idx < sizeX * sizeY * 3; idx++){
+		int z = idx % 3;
+		int x = (idx/3) % sizeY;
+		int y = i/(sizeY * 3);
+
+		
+		int value = 0;
+		for (int i = y; i < y + FILTER_WIDTH; i++){
+			for (int j = x; j < x + FILTER_WIDTH; j++){
+				if (i > -1 && i < sizeY && j > -1 && j < sizeX){
+					value += FILTER[(i-y)*FILTER_WIDTH + (j-x)] * data[(i-y)*sizeX*3 + (j-x)*sizeX + z];
+				}
+			}
+		}
+
+		if (value < 0) value =  0;
+		if (value > 255) value = 255;
+		result[idx] = value;
+	}
+
 }
 
 // The image is flattened into a text file of pixel values.
