@@ -88,8 +88,17 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 	cout << i << " entries saved\n";
 }
 
+void flipFilter(int *filter, int *result, int filterWidth){
+	for (int i=0; i < filterWidth*filterWidth; i++){
+		int y = (i / filterWidth);
+		int x = (i % filterWidth);
+
+		result[(filterWidth-y-1)*filterWidth + x] = filter[i];
+	}
+}
+
 // TODO: implement the kneral function for 2D smoothing 
-__global__ void smoothen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH, int filterSum){
+__global__ void smoothen(int *data, int *result, int *filter, int sizeX, int sizeY, int FILTER_WIDTH, int filterSum){
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
 	if(idx < sizeX * sizeY * 3) {
@@ -102,7 +111,7 @@ __global__ void smoothen(int *data, int *result, int *FILTER, int sizeX, int siz
 		for (int i = y; i < y + FILTER_WIDTH; i++){
 			for (int j = x; j < x + FILTER_WIDTH; j++){
 				if (i > -1 && i < sizeY && j > -1 && j < sizeX){
-					value += FILTER[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX*3 + j*3 + z];
+					value += filter[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX*3 + j*3 + z];
 				}
 			}
 		}
@@ -123,23 +132,26 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	//	int result[] - int array holding the image
 
 	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
+	int *filter = new int[FILTER_WIDTH*FILTER_WIDTH];
+	flipFilter(FILTER, filter, FILTER_WIDTH);
+
 	// TODO: allocate device memory and copy data onto the device
-	int *d_data, *d_result, *d_FILTER;
+	int *d_data, *d_result, *d_filter;
 	int size = (sizeX * sizeY * 3) * sizeof(int);
 	
 	cudaMalloc((void **)&d_data, size);
 	cudaMalloc((void **)&d_result, size);
-	cudaMalloc((void **)&d_FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
+	cudaMalloc((void **)&d_filter, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
 
 	cudaMemcpy(d_data, data, size, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_FILTER, FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_filter, filter, FILTER_WIDTH * FILTER_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
 
 	// Start timer for kernel
 	auto startKernel = chrono::steady_clock::now();
 	const int n_blocks = (sizeX * sizeY * 3)/BLOCK_SIZE;
 
 	// TODO: call the kernel function
-	smoothen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH, filterSum);
+	smoothen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_filter, sizeX, sizeY, FILTER_WIDTH, filterSum);
 
 	// End timer for kernel and display kernel time
 	cudaDeviceSynchronize(); // <- DO NOT REMOVE
@@ -150,7 +162,7 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	cudaMemcpy(result, d_result, size, cudaMemcpyDeviceToHost);
 
 	// TODO: free device memory
-	cudaFree(d_data); cudaFree(d_result); cudaFree(d_FILTER);
+	cudaFree(d_data); cudaFree(d_result); cudaFree(d_filter);
 }
 
 
@@ -166,6 +178,8 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// TODO: smooth the image with filter size = FILTER_WIDTH
 	//       apply zero padding for the border
 	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
+	int *filter = new int[FILTER_WIDTH*FILTER_WIDTH];
+	flipFilter(FILTER, filter, FILTER_WIDTH);
 
 	long long idx = 0;
 	for (idx = 0; idx < sizeX * sizeY * 3; idx++){
@@ -178,7 +192,7 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 		for (int i = y; i < y + FILTER_WIDTH; i++){
 			for (int j = x; j < x + FILTER_WIDTH; j++){
 				if (i > -1 && i < sizeY && j > -1 && j < sizeX){
-					value += FILTER[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX*3 + j*3 + z];
+					value += filter[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX*3 + j*3 + z];
 				}
 			}
 		}

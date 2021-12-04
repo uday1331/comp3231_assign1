@@ -15,11 +15,17 @@ using namespace std;
 
 const int FILTER_WIDTH = 3;
 
-//We will only use this filter in part 1
+// We will only use this filter in part 1
+// int FILTER[FILTER_WIDTH*FILTER_WIDTH] = {
+//     0, -1, 0, 
+//     -1, 5, -1, 
+//     0, -1, 0
+// };
+
 int FILTER[FILTER_WIDTH*FILTER_WIDTH] = {
-    0, -1, 0, 
-    -1, 5, -1, 
-    0, -1, 0
+    -1, -2, -1, 
+    0, 0, 0, 
+    1, 2, 1
 };
 
 // Display the first and last 10 items
@@ -84,24 +90,33 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 	cout << i << " entries saved\n";
 }
 
+void flipFilter(int *filter, int *result, int filterWidth){
+	for (int i=0; i < filterWidth*filterWidth; i++){
+		int y = (i / filterWidth);
+		int x = (i % filterWidth);
+
+		result[(filterWidth-y-1)*filterWidth + x] = filter[i];
+	}
+}
+
 //TODO: Implement the kernel function
 
-__global__ void sharpen(int *data, int *result, int *FILTER, int sizeX, int sizeY, int FILTER_WIDTH, int filterSum){
+__global__ void sharpen(int *data, int *result, int *filter, int sizeX, int sizeY, int filterWidth, int filterSum){
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
 	
 	if(idx < sizeX * sizeY) {
-		int fltrOffSetI = (idx / sizeX) - FILTER_WIDTH/2;
-		int fltrOffSetJ = (idx % sizeX) - FILTER_WIDTH/2;
+		int y = (idx / sizeX) - filterWidth/2;
+		int x = (idx % sizeX) - filterWidth/2;
 		
 		int value = 0;
-		for (int i = fltrOffSetI; i < fltrOffSetI + FILTER_WIDTH; i++){
-			for (int j = fltrOffSetJ; j < fltrOffSetJ + FILTER_WIDTH; j++){
-				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += FILTER[(i-fltrOffSetI)*FILTER_WIDTH + (j-fltrOffSetJ)] * data[i*sizeX + j];
+		for (int i = y; i < y + filterWidth; i++){
+			for (int j = x; j < x + filterWidth; j++){
+				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += filter[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX + j];
 			}
 		}
 
-		value /= filterSum;
-		if (value < 0) value =  0;
+		if(filterSum != 0) value /= filterSum;
+		// if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
 	}
@@ -116,19 +131,20 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// output:
 	//	int result[] - int array holding the output image
 
-	// TODO: malloc memory, copy input "from host to device"
-
 	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
+	int *filter = new int[FILTER_WIDTH*FILTER_WIDTH];
+	flipFilter(FILTER, filter, FILTER_WIDTH);
 
-	int *d_data, *d_result, *d_FILTER;
+	// TODO: malloc memory, copy input "from host to device"
+	int *d_data, *d_result, *d_filter;
 	int size = (sizeX * sizeY) * sizeof(int);
 
 	cudaMalloc((void **)&d_data, size);
 	cudaMalloc((void **)&d_result, size);
-	cudaMalloc((void **)&d_FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
+	cudaMalloc((void **)&d_filter, FILTER_WIDTH * FILTER_WIDTH * sizeof(int));
 
 	cudaMemcpy(d_data, data, size, cudaMemcpyHostToDevice);
-	cudaMemcpy(d_FILTER, FILTER, FILTER_WIDTH * FILTER_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_filter, filter, FILTER_WIDTH * FILTER_WIDTH * sizeof(int), cudaMemcpyHostToDevice);
 	
 
 	// Start timer for kernel
@@ -137,7 +153,7 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	const int n_blocks = (sizeX * sizeY)/BLOCK_SIZE;
 
 	// TODO: call the kernel function
-	sharpen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_FILTER, sizeX, sizeY, FILTER_WIDTH, filterSum);
+	sharpen<<<n_blocks, BLOCK_SIZE>>>(d_data, d_result, d_filter, sizeX, sizeY, FILTER_WIDTH, filterSum);
 	// End timer for kernel and display kernel time
 	cudaDeviceSynchronize(); // <- DO NOT REMOVE
 	auto endKernel = chrono::steady_clock::now();
@@ -146,8 +162,10 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// TODO: copy reuslt from device to host
 	cudaMemcpy(result, d_result, size, cudaMemcpyDeviceToHost);
 
+	for (int i=0; i<5;i++) cout<<result[i];
+
 	// TODO: free device memory <- important, keep your code clean
-	cudaFree(d_data); cudaFree(d_result); cudaFree(d_FILTER);
+	cudaFree(d_data); cudaFree(d_result); cudaFree(d_filter);
 }
 
 
@@ -162,21 +180,24 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// TODO: sharpen the image with filter
 	//       apply zero padding for the border
 	int filterSum = accumulate(begin(FILTER), end(FILTER), 0, plus<int>());
+	int *filter = new int[FILTER_WIDTH*FILTER_WIDTH];
+	flipFilter(FILTER, filter, FILTER_WIDTH);
 
 	long long idx = 0;
 	for (idx = 0; idx < sizeX * sizeY; idx++){
-		int fltrOffSetI = (idx / sizeX) - FILTER_WIDTH/2;
-		int fltrOffSetJ = (idx % sizeX) - FILTER_WIDTH/2;
+		int y = (idx / sizeX) - FILTER_WIDTH/2;
+		int x = (idx % sizeX) - FILTER_WIDTH/2;
 		
 		int value = 0;
-		for (int i = fltrOffSetI; i < fltrOffSetI + FILTER_WIDTH; i++){
-			for (int j = fltrOffSetJ; j < fltrOffSetJ + FILTER_WIDTH; j++){
-				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += FILTER[(i-fltrOffSetI)*FILTER_WIDTH + (j-fltrOffSetJ)] * data[i*sizeX + j];
+		for (int i = y; i < y + FILTER_WIDTH; i++){
+			for (int j = x; j < x + FILTER_WIDTH; j++){
+				if (i > -1 && i < sizeY && j > -1 && j < sizeX)	value += filter[(i-y)*FILTER_WIDTH + (j-x)] * data[i*sizeX + j];
 			}
 		}
 
-		value /= filterSum;
-		if (value < 0) value =  0;
+
+		if(filterSum != 0) value /= filterSum;
+		// if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
 	}
