@@ -89,12 +89,7 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 }
 
 void flipFilter(int *filter, int *result, int filterWidth){
-	for (int i=0; i < filterWidth*filterWidth; i++){
-		int y = (i / filterWidth);
-		int x = (i % filterWidth);
-
-		result[(filterWidth-y-1)*filterWidth + x] = filter[i];
-	}
+	for (int i=0; i < filterWidth*filterWidth; i++) result[filterWidth*filterWidth-i-1] = filter[i];
 }
 
 // TODO: implement the kneral function for 2D smoothing 
@@ -115,7 +110,7 @@ __global__ void smoothen(int *data, int *result, int *filter, int sizeX, int siz
 				}
 			}
 		}
-		value /= filterSum;
+		if(filterSum != 0) value /= filterSum;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
@@ -196,7 +191,8 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 				}
 			}
 		}
-		value /= filterSum;
+		
+		if(filterSum != 0) value /= filterSum;
 		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;

@@ -16,16 +16,10 @@ using namespace std;
 const int FILTER_WIDTH = 3;
 
 // We will only use this filter in part 1
-// int FILTER[FILTER_WIDTH*FILTER_WIDTH] = {
-//     0, -1, 0, 
-//     -1, 5, -1, 
-//     0, -1, 0
-// };
-
 int FILTER[FILTER_WIDTH*FILTER_WIDTH] = {
-    -1, -2, -1, 
-    0, 0, 0, 
-    1, 2, 1
+    0, -1, 0, 
+    -1, 5, -1, 
+    0, -1, 0
 };
 
 // Display the first and last 10 items
@@ -91,16 +85,10 @@ void saveResult(string file, int data[], int sizeX, int sizeY) {
 }
 
 void flipFilter(int *filter, int *result, int filterWidth){
-	for (int i=0; i < filterWidth*filterWidth; i++){
-		int y = (i / filterWidth);
-		int x = (i % filterWidth);
-
-		result[(filterWidth-y-1)*filterWidth + x] = filter[i];
-	}
+	for (int i=0; i < filterWidth*filterWidth; i++) result[filterWidth*filterWidth-i-1] = filter[i];
 }
 
 //TODO: Implement the kernel function
-
 __global__ void sharpen(int *data, int *result, int *filter, int sizeX, int sizeY, int filterWidth, int filterSum){
 	int idx = threadIdx.x + blockIdx.x * blockDim.x;
 	
@@ -116,7 +104,7 @@ __global__ void sharpen(int *data, int *result, int *filter, int sizeX, int size
 		}
 
 		if(filterSum != 0) value /= filterSum;
-		// if (value < 0) value =  0;
+		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
 	}
@@ -162,8 +150,6 @@ void GPU_Test(int data[], int result[], int sizeX, int sizeY) {
 	// TODO: copy reuslt from device to host
 	cudaMemcpy(result, d_result, size, cudaMemcpyDeviceToHost);
 
-	for (int i=0; i<5;i++) cout<<result[i];
-
 	// TODO: free device memory <- important, keep your code clean
 	cudaFree(d_data); cudaFree(d_result); cudaFree(d_filter);
 }
@@ -197,7 +183,7 @@ void CPU_Test(int data[], int result[], int sizeX, int sizeY) {
 
 
 		if(filterSum != 0) value /= filterSum;
-		// if (value < 0) value =  0;
+		if (value < 0) value =  0;
 		if (value > 255) value = 255;
 		result[idx] = value;
 	}
