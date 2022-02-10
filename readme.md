@@ -1,3 +1,6 @@
+# What it is
+Applies sharpen (part 1) and gaussian blurr (filters) to the given image using cpu and cuda implementations
+
 # How to run
 #### compile 
     nvcc part1.cu -o part1
