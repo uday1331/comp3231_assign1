@@ -225,7 +225,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Elapsed time: " << chrono::duration <double, milli>(endCPU - startCPU).count() << "ms\n";
 
-	displayResult(dataForCPUTest, resultForCPUTest, size);
+	// displayResult(dataForCPUTest, resultForCPUTest, size);
 
 	saveResult("color_result_CPU.txt",resultForCPUTest, sizeX, sizeY);
 
@@ -238,7 +238,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Elapsed time: " << chrono::duration <double, milli>(endGPU - startGPU).count() << "ms\n";
 
-	displayResult(dataForGPUTest, resultForGPUTest, size);
+	// displayResult(dataForGPUTest, resultForGPUTest, size);
 	saveResult("color_result_GPU.txt",resultForGPUTest, sizeX, sizeY);
 
 	return 0;
